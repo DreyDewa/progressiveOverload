@@ -15,7 +15,7 @@ A free, self-hostable progressive overload tracker. Log your sets at the gym, se
 ## Deploy your own
 
 <!-- TODO: replace REPO_URL with the GitHub URL (URL-encoded) -->
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=REPO_URL&env=MONGODB_URI,AUTH_SECRET&envDescription=MongoDB%20Atlas%20connection%20string%20and%20a%20random%20secret%20for%20sessions)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/DreyDewa/progressiveOverload&env=MONGODB_URI,AUTH_SECRET&envDescription=MongoDB%20Atlas%20connection%20string%20and%20a%20random%20secret%20for%20sessions)
 
 1. Create a free MongoDB Atlas cluster (M0).
 2. Database Access: create a database user.
