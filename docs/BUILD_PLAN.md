@@ -18,7 +18,7 @@ This is the complete spec for v1. It is written to be executed **one task at a t
 - [x] Task 1 — Database connection + models
 - [x] Task 2 — Auth library + middleware
 - [x] Task 3 — Auth + account API routes
-- [ ] Task 4 — App shell, UI primitives, login/register pages
+- [x] Task 4 — App shell, UI primitives, login/register pages
 - [ ] Task 5 — Exercises API
 - [ ] Task 6 — Days API + rotation logic
 - [ ] Task 7 — Days & exercises management UI
