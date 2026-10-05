@@ -28,7 +28,7 @@ This is the complete spec for v1. It is written to be executed **one task at a t
 - [x] Task 11 — Stats library + stats API
 - [x] Task 12 — Progress page
 - [x] Task 13 — Settings page
-- [ ] Task 14 — PWA (manifest, icons, metadata)
+- [x] Task 14 — PWA (manifest, icons, metadata)
 - [ ] Task 15 — README, deploy button, final QA
 
 ---
