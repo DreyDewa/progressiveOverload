@@ -15,7 +15,7 @@ This is the complete spec for v1. It is written to be executed **one task at a t
 ### Progress
 
 - [x] Task 0 — Scaffold project
-- [ ] Task 1 — Database connection + models
+- [x] Task 1 — Database connection + models
 - [ ] Task 2 — Auth library + middleware
 - [ ] Task 3 — Auth + account API routes
 - [ ] Task 4 — App shell, UI primitives, login/register pages
