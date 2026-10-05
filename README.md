@@ -2,6 +2,8 @@
 
 A free, self-hostable progressive overload tracker. Log your sets at the gym, see what you did last time, and watch your strength score go up.
 
+https://progressive-overload-red.vercel.app/
+
 ## Features
 
 - Custom workout days that run in a rotation
