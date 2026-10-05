@@ -19,7 +19,7 @@ This is the complete spec for v1. It is written to be executed **one task at a t
 - [x] Task 2 — Auth library + middleware
 - [x] Task 3 — Auth + account API routes
 - [x] Task 4 — App shell, UI primitives, login/register pages
-- [ ] Task 5 — Exercises API
+- [x] Task 5 — Exercises API
 - [ ] Task 6 — Days API + rotation logic
 - [ ] Task 7 — Days & exercises management UI
 - [ ] Task 8 — Sessions API
