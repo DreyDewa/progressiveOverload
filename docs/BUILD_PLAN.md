@@ -17,7 +17,7 @@ This is the complete spec for v1. It is written to be executed **one task at a t
 - [x] Task 0 — Scaffold project
 - [x] Task 1 — Database connection + models
 - [x] Task 2 — Auth library + middleware
-- [ ] Task 3 — Auth + account API routes
+- [x] Task 3 — Auth + account API routes
 - [ ] Task 4 — App shell, UI primitives, login/register pages
 - [ ] Task 5 — Exercises API
 - [ ] Task 6 — Days API + rotation logic
