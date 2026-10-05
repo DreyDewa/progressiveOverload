@@ -23,7 +23,7 @@ This is the complete spec for v1. It is written to be executed **one task at a t
 - [x] Task 6 — Days API + rotation logic
 - [x] Task 7 — Days & exercises management UI
 - [x] Task 8 — Sessions API
-- [ ] Task 9 — Home page
+- [x] Task 9 — Home page
 - [ ] Task 10 — Workout (logging) page
 - [ ] Task 11 — Stats library + stats API
 - [ ] Task 12 — Progress page
