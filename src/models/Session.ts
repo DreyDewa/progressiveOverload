@@ -4,6 +4,8 @@ const setSchema = new Schema(
   {
     weight: { type: Number, required: true, min: 0 },
     reps: { type: Number, required: true, min: 0 },
+    // When the set was logged. Missing on sets logged before this field existed (use the session's startedAt).
+    at: { type: Date },
   },
   { _id: false },
 );

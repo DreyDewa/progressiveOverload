@@ -30,6 +30,7 @@ This is the complete spec for v1. It is written to be executed **one task at a t
 - [x] Task 13 — Settings page
 - [x] Task 14 — PWA (manifest, icons, metadata)
 - [x] Task 15 — README, deploy button, final QA
+- [x] Task 16 — Best set, last 7 days, several open workouts (requested after v1)
 
 ---
 
@@ -37,7 +38,7 @@ This is the complete spec for v1. It is written to be executed **one task at a t
 
 A free, open-source, mobile-first web app for tracking progressive overload at the gym. Users add it to their phone home screen (PWA). Anyone can self-host it on Vercel + MongoDB Atlas.
 
-The user has a split of N workout days (e.g. "Chest + Back", "Legs", …). At the gym they tap the day they are doing, and a page opens listing that day's exercises. For each exercise they log sets (weight × reps) live, set by set. Next to each exercise they see **what they did last time**, so they know what to beat. Progress pages show charts and an overall strength score.
+The user has a split of N workout days (e.g. "Chest + Back", "Legs", …). At the gym they tap the day they are doing, and a page opens listing that day's exercises. For each exercise they log sets (weight × reps) live, set by set. Next to each exercise they see **their best session for it** (changed in Task 16), so they know what to beat. Progress pages show charts and an overall strength score.
 
 ## Product decisions (fixed — do not change)
 
@@ -45,9 +46,9 @@ The user has a split of N workout days (e.g. "Chest + Back", "Legs", …). At th
 |---|---|
 | Accounts | Username + password only. No email, no password reset, no OAuth. |
 | Number of days | User-defined. **New users start with 4 days** named "Day 1" … "Day 4", all empty. Users can add (max 14), rename, reorder and delete days (min 1). |
-| Day order | Days are a **rotation**, not tied to weekdays. "Up next" = the day after the day of the most recently finished workout (wrapping around). |
+| Day order | Days are a **rotation**, not tied to weekdays. "Up next" = the day after the day of the most recently started workout that has logged sets, finished or still open (wrapping around; changed in Task 16). |
 | Exercise library | **There is no seeded/global library. Zero exercises exist by default.** Each user creates their own exercises (by typing a name). Users never see other users' exercises. |
-| Recommendations | **The app never recommends weights, reps or targets.** It only shows what the user did last time and a small ▲ / ▼ / = comparison per set. No rep ranges, no "increase weight" prompts. |
+| Recommendations | **The app never recommends weights, reps or targets.** It only shows the user's best session for each exercise (Task 16) and a small ▲ / ▼ / = comparison per set. No rep ranges, no "increase weight" prompts. |
 | Logging | Live, at the gym, set by set. Every change auto-saves to the server. |
 | Units | Per-user setting, `kg` (default) or `lb`. **All weights are stored in kg** in the database and converted for display/input. |
 | Bodyweight exercises | No special handling. Users can type 0 as weight. Sets with weight 0 are stored but ignored by stats/charts. |
@@ -123,7 +124,7 @@ Index: `{ userId: 1, nameLower: 1 }` unique.
 
 Index: `{ userId: 1, startedAt: -1 }`.
 
-A user has **at most one** session with `finishedAt: null` at a time (enforced in code, Task 8).
+~~A user has at most one session with `finishedAt: null` at a time.~~ Since Task 16 a user can have several open sessions (at most one per day); a session stays open until the user finishes or discards it. Each set also stores `at: Date` (when it was logged; missing on older data, which falls back to `startedAt`).
 
 ---
 
@@ -904,6 +905,19 @@ No binary image files and no service worker. Icons are generated with `ImageResp
    - [ ] `npm test`, `npm run lint`, `npm run build` all pass.
 
 **Commit:** `docs: add README and deploy instructions`
+
+---
+
+## Task 16: Best set, last 7 days, several open workouts
+
+Requested by the user after v1 shipped. This task overrides the parts of Tasks 8, 9 and 10 it mentions.
+
+1. **Best instead of last time.** `GET /api/sessions/[id]` returns `best` instead of `lastTime`, with the same shape. For each exercise it picks, from every other session of this user that has sets for that exercise (finished or open), the one with the highest `bestE1rm`. Ties go to the most recent. `date` = when that entry's latest set was logged. Pure helper: `pickBest` in `src/lib/stats.ts`. The workout page labels the line "Best · Mon 28 Sep" and highlights the top set; ▲ / ▼ / = compare against the best session's set at the same index.
+2. **Set times.** `setSchema` gains `at: Date`. On `PUT /api/sessions/[id]`, each incoming set that matches an unused stored set of the same exercise (same weight and reps) keeps that set's `at` (or `startedAt` if it has none). Every other set gets `now`. Pure helper: `stampSets` in `src/lib/sets.ts`.
+3. **Several open workouts.** `POST /api/sessions { dayId }` returns the open session for that day if there is one. Otherwise it deletes the user's open sessions that have no sets and creates a new one. It never finishes another workout. `GET /api/sessions/active` returns `{ sessions: { id, dayId, dayName, startedAt }[] }` (newest first). Home shows one "Workout in progress" card per open session, an "In progress" tag on those days, and "Resume" instead of "Start" on Up next when that day is open. The finish-the-other-workout confirm is removed. The workout page shows "Also open:" links to the other open workouts.
+4. **Last 7 days.** `GET /api/sessions/week?since=ISO` returns `{ items: { sessionId, dayName, exercise, at }[] }`, one item per set logged since `since`. Home shows a "Last 7 days" card: one row per calendar day (oldest first, local time), each listing the workouts trained that day and their exercises, or "Rest". A workout resumed on a later day shows on both days. Pure helpers: `windowStart` and `groupWeek` in `src/lib/week.ts`.
+
+**Verify:** `npm test` (tests for `pickBest`, `stampSets`, `groupWeek`), lint and build pass.
 
 ---
 

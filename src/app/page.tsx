@@ -4,18 +4,21 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { groupWeek, windowStart, type WeekDay, type WeekItem } from '@/lib/week';
 import { Button, Card, ErrorText } from '@/components/ui';
 
 type Day = { id: string; name: string; order: number; exerciseIds: string[] };
-type Active = { id: string; dayId: string; dayName: string; startedAt: string } | null;
+type Open = { id: string; dayId: string; dayName: string; startedAt: string };
 
+const dateFmt: Intl.DateTimeFormatOptions = { weekday: 'short', day: 'numeric', month: 'short' };
 const exLabel = (n: number) => `${n} ${n === 1 ? 'exercise' : 'exercises'}`;
 
 export default function Home() {
   const router = useRouter();
   const [days, setDays] = useState<Day[] | null>(null);
   const [upNextId, setUpNextId] = useState<string | null>(null);
-  const [active, setActive] = useState<Active>(null);
+  const [open, setOpen] = useState<Open[]>([]);
+  const [week, setWeek] = useState<WeekDay[] | null>(null);
   const [score, setScore] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -27,8 +30,12 @@ export default function Home() {
         setUpNextId(d.upNextDayId);
       })
       .catch((e: Error) => setError(e.message));
-    api<{ session: Active }>('/api/sessions/active')
-      .then((d) => setActive(d.session))
+    api<{ sessions: Open[] }>('/api/sessions/active')
+      .then((d) => setOpen(d.sessions))
+      .catch(() => {});
+    const today = new Date();
+    api<{ items: WeekItem[] }>(`/api/sessions/week?since=${encodeURIComponent(windowStart(today).toISOString())}`)
+      .then((d) => setWeek(groupWeek(d.items, today)))
       .catch(() => {});
     api<{ score: number | null }>('/api/stats')
       .then((d) => setScore(d.score))
@@ -40,20 +47,6 @@ export default function Home() {
     if (day.exerciseIds.length === 0) {
       router.push(`/days/${day.id}`);
       return;
-    }
-    if (active && active.dayId !== day.id) {
-      // Only warn when the other workout has logged sets.
-      let hasSets = true;
-      try {
-        const s = await api<{ session: { entries: { sets: unknown[] }[] } }>(`/api/sessions/${active.id}`);
-        hasSets = s.session.entries.some((e) => e.sets.length > 0);
-      } catch {}
-      if (
-        hasSets &&
-        !window.confirm(`You have a workout in progress for ${active.dayName}. Finish it and start ${day.name}?`)
-      ) {
-        return;
-      }
     }
     setBusy(true);
     setError('');
@@ -67,6 +60,7 @@ export default function Home() {
   }
 
   const upNext = days?.find((d) => d.id === upNextId) ?? null;
+  const openFor = (dayId: string) => open.find((o) => o.dayId === dayId);
 
   return (
     <main className="max-w-md mx-auto px-4 pt-4 pb-28">
@@ -85,18 +79,20 @@ export default function Home() {
 
       {days && (
         <div className="space-y-4">
-          {active && (
-            <Card className="border-lime-400">
-              <p className="text-sm text-zinc-400">Workout in progress</p>
-              <p className="text-lg font-medium mb-3">{active.dayName}</p>
+          {open.map((o) => (
+            <Card key={o.id} className="border-lime-400">
+              <p className="text-sm text-zinc-400">
+                Workout in progress · started {new Date(o.startedAt).toLocaleDateString(undefined, dateFmt)}
+              </p>
+              <p className="text-lg font-medium mb-3">{o.dayName}</p>
               <Link
-                href={`/workout/${active.id}`}
+                href={`/workout/${o.id}`}
                 className="flex items-center justify-center min-h-11 rounded-xl px-4 font-medium bg-lime-400 text-zinc-950"
               >
                 Resume
               </Link>
             </Card>
-          )}
+          ))}
 
           {upNext && (
             <Card className="border-lime-400/40">
@@ -104,9 +100,38 @@ export default function Home() {
               <p className="text-2xl font-semibold">{upNext.name}</p>
               <p className="text-sm text-zinc-400 mb-4">{exLabel(upNext.exerciseIds.length)}</p>
               <Button className="w-full" disabled={busy} onClick={() => start(upNext)}>
-                Start
+                {openFor(upNext.id) ? 'Resume' : 'Start'}
               </Button>
             </Card>
+          )}
+
+          {week && (
+            <div>
+              <p className="text-sm text-zinc-400 mb-2">Last 7 days</p>
+              <Card className="divide-y divide-zinc-800 py-1">
+                {week.map((d) => (
+                  <div key={d.date.toISOString()} className="flex gap-3 py-2">
+                    <span className="w-20 shrink-0 text-sm text-zinc-400 tabular-nums">
+                      {d.date.toLocaleDateString(undefined, dateFmt)}
+                    </span>
+                    {d.workouts.length === 0 ? (
+                      <span className="text-sm text-zinc-500">Rest</span>
+                    ) : (
+                      <div className="min-w-0 space-y-1">
+                        {d.workouts.map((w) => (
+                          <Link key={w.sessionId} href={`/workout/${w.sessionId}`} className="block">
+                            <span className="block text-sm font-medium">{w.dayName}</span>
+                            <span className="block text-sm text-zinc-400">
+                              {w.exercises.map((e) => e.name).join(' · ')}
+                            </span>
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </Card>
+            </div>
           )}
 
           <div>
@@ -123,8 +148,12 @@ export default function Home() {
                     <span className="block font-medium">{d.name}</span>
                     <span className="block text-sm text-zinc-400">{exLabel(d.exerciseIds.length)}</span>
                   </span>
-                  {d.id === upNextId && (
-                    <span className="text-xs rounded-full bg-lime-400/15 text-lime-400 px-2 py-1">Up next</span>
+                  {openFor(d.id) ? (
+                    <span className="text-xs rounded-full bg-lime-400/15 text-lime-400 px-2 py-1">In progress</span>
+                  ) : (
+                    d.id === upNextId && (
+                      <span className="text-xs rounded-full bg-lime-400/15 text-lime-400 px-2 py-1">Up next</span>
+                    )
                   )}
                 </button>
               ))}

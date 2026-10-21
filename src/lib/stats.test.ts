@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bestE1rm, e1rm, exerciseSeries, strengthSeries, type SessionLog } from './stats';
+import { bestE1rm, e1rm, exerciseSeries, pickBest, strengthSeries, type SessionLog } from './stats';
 
 const s = (date: string, entries: Record<string, [number, number][]>): SessionLog => ({
   date,
@@ -62,5 +62,24 @@ describe('exerciseSeries', () => {
     expect(r.A).toHaveLength(1);
     expect(r.A[0].best).toEqual({ weight: 80, reps: 10 });
     expect(r.A[0].e1rm).toBeCloseTo(106.67, 2);
+  });
+});
+
+describe('pickBest', () => {
+  const c = (date: string, sets: [number, number][]) => ({ date, sets: sets.map(([weight, reps]) => ({ weight, reps })) });
+  it('returns null when nothing is valid', () => {
+    expect(pickBest([])).toBeNull();
+    expect(pickBest([c('2024-01-01', [[0, 10]])])).toBeNull();
+  });
+  it('picks the strongest session, not the most recent', () => {
+    const strong = c('2024-01-01', [[100, 8], [100, 6]]);
+    const weak = c('2024-01-08', [[80, 8]]);
+    expect(pickBest([weak, strong])).toBe(strong);
+  });
+  it('breaks ties with the most recent', () => {
+    const older = c('2024-01-01', [[100, 5]]);
+    const newer = c('2024-01-08', [[100, 5]]);
+    expect(pickBest([older, newer])).toBe(newer);
+    expect(pickBest([newer, older])).toBe(newer);
   });
 });

@@ -2,6 +2,8 @@ import mongoose from 'mongoose';
 import { getUserId } from '@/lib/auth';
 import { dbConnect } from '@/lib/db';
 import { json, jsonError, readJson } from '@/lib/http';
+import { stampSets } from '@/lib/sets';
+import { pickBest } from '@/lib/stats';
 import { Exercise } from '@/models/Exercise';
 import { Session } from '@/models/Session';
 import { User } from '@/models/User';
@@ -42,27 +44,27 @@ export async function GET(_req: Request, { params }: Ctx) {
   }
   const exercises = ordered.map((eid) => ({ id: eid, name: byId.get(eid)!.name }));
 
-  const lastTime: Record<string, { date: string; sets: SetLog[] }> = {};
+  // Per exercise, the session (other than this one) with the strongest set: the one to beat.
+  const best: Record<string, { date: string; sets: SetLog[] }> = {};
   if (ordered.length) {
-    const past = await Session.find({
-      userId,
-      finishedAt: { $ne: null },
-      _id: { $ne: id },
-      'entries.exerciseId': { $in: ordered },
-    })
-      .sort({ startedAt: -1 })
-      .limit(100)
+    const past = await Session.find({ userId, _id: { $ne: id }, 'entries.exerciseId': { $in: ordered } })
+      .select('startedAt entries')
       .lean();
+    const candidates = new Map<string, { date: string; sets: SetLog[] }[]>();
     for (const p of past) {
       for (const e of p.entries) {
         const eid = e.exerciseId.toString();
-        if (ordered.includes(eid) && !lastTime[eid] && e.sets.length > 0) {
-          lastTime[eid] = {
-            date: p.startedAt.toISOString(),
-            sets: e.sets.map((s) => ({ weight: s.weight, reps: s.reps })),
-          };
-        }
+        if (!ordered.includes(eid) || e.sets.length === 0) continue;
+        // Date it by when the sets were logged, which differs from startedAt for a workout resumed later.
+        const last = Math.max(...e.sets.map((s) => (s.at ?? p.startedAt).getTime()));
+        const list = candidates.get(eid) ?? [];
+        list.push({ date: new Date(last).toISOString(), sets: e.sets.map((s) => ({ weight: s.weight, reps: s.reps })) });
+        candidates.set(eid, list);
       }
+    }
+    for (const [eid, list] of candidates) {
+      const pick = pickBest(list);
+      if (pick) best[eid] = pick;
     }
   }
 
@@ -77,7 +79,7 @@ export async function GET(_req: Request, { params }: Ctx) {
     },
     unit: user?.unit ?? 'kg',
     exercises,
-    lastTime,
+    best,
   });
 }
 
@@ -115,7 +117,12 @@ export async function PUT(req: Request, { params }: Ctx) {
     }
     if (cleanSets.length > 0) cleaned.push({ exerciseId, sets: cleanSets });
   }
-  session.set('entries', cleaned);
+  const now = new Date();
+  const stamped = cleaned.map((e) => {
+    const old = session.entries.find((o) => o.exerciseId.toString() === e.exerciseId);
+    return { exerciseId: e.exerciseId, sets: stampSets(old?.sets ?? [], e.sets, now, session.startedAt) };
+  });
+  session.set('entries', stamped);
   await session.save();
   return json({ ok: true });
 }

@@ -13,7 +13,7 @@ export async function GET() {
   await dbConnect();
   const docs = await WorkoutDay.find({ userId }).sort({ order: 1 }).lean();
   const days = docs.map(toDay);
-  const last = await Session.findOne({ userId, finishedAt: { $ne: null } })
+  const last = await Session.findOne({ userId, 'entries.0': { $exists: true } })
     .sort({ startedAt: -1 })
     .select('dayId')
     .lean();

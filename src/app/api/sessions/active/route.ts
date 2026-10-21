@@ -7,9 +7,13 @@ export async function GET() {
   const userId = await getUserId();
   if (!userId) return jsonError('Unauthorized', 401);
   await dbConnect();
-  const s = await Session.findOne({ userId, finishedAt: null }).lean();
-  if (!s) return json({ session: null });
+  const docs = await Session.find({ userId, finishedAt: null }).sort({ startedAt: -1 }).lean();
   return json({
-    session: { id: s._id.toString(), dayId: s.dayId.toString(), dayName: s.dayName, startedAt: s.startedAt.toISOString() },
+    sessions: docs.map((s) => ({
+      id: s._id.toString(),
+      dayId: s.dayId.toString(),
+      dayName: s.dayName,
+      startedAt: s.startedAt.toISOString(),
+    })),
   });
 }

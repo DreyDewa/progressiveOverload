@@ -61,3 +61,18 @@ export function exerciseSeries(
   }
   return result;
 }
+
+/** The candidate with the highest bestE1rm (ties go to the most recent). null if none has a valid set. */
+export function pickBest<T extends { date: string; sets: SetLog[] }>(candidates: T[]): T | null {
+  let best: T | null = null;
+  let bestValue = 0;
+  for (const c of candidates) {
+    const v = bestE1rm(c.sets);
+    if (v <= 0) continue;
+    if (!best || v > bestValue || (v === bestValue && new Date(c.date) > new Date(best.date))) {
+      best = c;
+      bestValue = v;
+    }
+  }
+  return best;
+}

@@ -22,8 +22,9 @@ type SessionData = {
   };
   unit: Unit;
   exercises: { id: string; name: string }[];
-  lastTime: Record<string, { date: string; sets: SetLog[] }>;
+  best: Record<string, { date: string; sets: SetLog[] }>;
 };
+type Open = { id: string; dayName: string };
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 const validReps = (s: string) => /^\d+$/.test(s) && parseInt(s, 10) > 0;
@@ -37,6 +38,7 @@ export default function WorkoutPage() {
   const [status, setStatus] = useState<SaveStatus>('idle');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [others, setOthers] = useState<Open[]>([]);
 
   const latestRows = useRef<Rows>({});
   const unitRef = useRef<Unit>('kg');
@@ -61,6 +63,9 @@ export default function WorkoutPage() {
         setData(d);
       })
       .catch((e: Error) => setError(e.message));
+    api<{ sessions: Open[] }>('/api/sessions/active')
+      .then((d) => setOthers(d.sessions.filter((o) => o.id !== id)))
+      .catch(() => {});
   }, [id]);
 
   // Focus a freshly added input after it has rendered.
@@ -187,7 +192,7 @@ export default function WorkoutPage() {
     );
   }
 
-  const { session, unit, exercises, lastTime } = data;
+  const { session, unit, exercises, best } = data;
   const readOnly = !!session.finishedAt;
 
   const statusText =
@@ -214,6 +219,21 @@ export default function WorkoutPage() {
       </header>
 
       <main className="max-w-md mx-auto px-4 pt-4 space-y-4">
+        {others.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-zinc-400">Also open:</span>
+            {others.map((o) => (
+              <Link
+                key={o.id}
+                href={`/workout/${o.id}`}
+                className="inline-flex items-center min-h-11 px-3 rounded-full bg-zinc-900 border border-zinc-800"
+              >
+                {o.dayName} ›
+              </Link>
+            ))}
+          </div>
+        )}
+
         {exercises.length === 0 && (
           <p className="text-zinc-400">
             This day has no exercises.{' '}
@@ -224,7 +244,8 @@ export default function WorkoutPage() {
         )}
 
         {exercises.map((ex) => {
-          const last = lastTime[ex.id];
+          const last = best[ex.id];
+          const topSet = last ? Math.max(...last.sets.map((s) => e1rm(s.weight, s.reps))) : 0;
           const list = rows[ex.id] ?? [];
           return (
             <Card key={ex.id} className="space-y-3">
@@ -232,7 +253,7 @@ export default function WorkoutPage() {
               <p className="text-sm text-zinc-400 tabular-nums">
                 {last ? (
                   <>
-                    Last time ·{' '}
+                    Best ·{' '}
                     {new Date(last.date).toLocaleDateString(undefined, {
                       weekday: 'short',
                       day: 'numeric',
@@ -240,7 +261,10 @@ export default function WorkoutPage() {
                     })}
                     <span className="block">
                       {last.sets.map((s, i) => (
-                        <span key={i} className="mr-3 whitespace-nowrap">
+                        <span
+                          key={i}
+                          className={`mr-3 whitespace-nowrap ${e1rm(s.weight, s.reps) === topSet ? 'text-zinc-100' : ''}`}
+                        >
                           {formatWeight(s.weight, unit)} × {s.reps}
                         </span>
                       ))}

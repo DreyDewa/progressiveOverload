@@ -15,16 +15,11 @@ export async function POST(req: Request) {
   const day = await WorkoutDay.findOne({ _id: dayId, userId }).lean();
   if (!day) return jsonError('Not found', 404);
 
-  const active = await Session.findOne({ userId, finishedAt: null });
-  if (active) {
-    if (active.dayId.toString() === dayId) return json({ id: active._id.toString() });
-    if (active.entries.some((e) => e.sets.length > 0)) {
-      active.finishedAt = new Date();
-      await active.save();
-    } else {
-      await active.deleteOne();
-    }
-  }
+  // Several workouts can be open at once; they stay open until the user finishes them.
+  const open = await Session.findOne({ userId, dayId, finishedAt: null }).sort({ startedAt: -1 }).lean();
+  if (open) return json({ id: open._id.toString() });
+  // Clean up open workouts that never got a set, so tapping a day by mistake leaves nothing behind.
+  await Session.deleteMany({ userId, finishedAt: null, 'entries.0': { $exists: false } });
   const created = await Session.create({
     userId,
     dayId: day._id,
