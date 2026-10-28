@@ -25,6 +25,9 @@ const sessionSchema = new Schema(
     dayName: { type: String, required: true },
     startedAt: { type: Date, required: true },
     finishedAt: { type: Date, default: null },
+    // Exercises picked for this workout, in display order. Empty on workouts started before picking existed
+    // (those show the day's exercises).
+    exerciseIds: [{ type: Schema.Types.ObjectId }],
     entries: [entrySchema],
   },
   { timestamps: true },

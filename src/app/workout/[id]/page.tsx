@@ -3,9 +3,10 @@
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api } from '@/lib/api';
+import { api, createExerciseForDay } from '@/lib/api';
 import { e1rm } from '@/lib/stats';
 import { formatWeight, parseWeight, unitToKg, type Unit } from '@/lib/units';
+import { ExercisePicker } from '@/components/ExercisePicker';
 import { Button, Card, ErrorText, Input } from '@/components/ui';
 
 type SetLog = { weight: number; reps: number };
@@ -25,6 +26,9 @@ type SessionData = {
   best: Record<string, { date: string; sets: SetLog[] }>;
 };
 type Open = { id: string; dayName: string };
+type Exercise = { id: string; name: string };
+// The day's exercises while the "Add exercise" panel is open. dayFound is false if the day was deleted.
+type Adding = { dayExercises: Exercise[]; dayFound: boolean; picked: Set<string> };
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 const validReps = (s: string) => /^\d+$/.test(s) && parseInt(s, 10) > 0;
@@ -39,6 +43,7 @@ export default function WorkoutPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [others, setOthers] = useState<Open[]>([]);
+  const [adding, setAdding] = useState<Adding | null>(null);
 
   const latestRows = useRef<Rows>({});
   const unitRef = useRef<Unit>('kg');
@@ -144,6 +149,74 @@ export default function WorkoutPage() {
   const removeSet = (ex: string, i: number) => {
     update({ ...latestRows.current, [ex]: (latestRows.current[ex] ?? []).filter((_, idx) => idx !== i) });
   };
+
+  async function openAdd() {
+    if (!data) return;
+    setError('');
+    try {
+      const d = await api<{ exercises: Exercise[] }>(`/api/days/${data.session.dayId}`);
+      setAdding({ dayExercises: d.exercises, dayFound: true, picked: new Set() });
+    } catch {
+      setAdding({ dayExercises: [], dayFound: false, picked: new Set() });
+    }
+  }
+
+  function togglePick(exId: string) {
+    setAdding((a) => {
+      if (!a) return a;
+      const picked = new Set(a.picked);
+      if (picked.has(exId)) picked.delete(exId);
+      else picked.add(exId);
+      return { ...a, picked };
+    });
+  }
+
+  async function createForAdd(name: string) {
+    if (!data || !adding) return;
+    setError('');
+    try {
+      const ex = await createExerciseForDay(
+        adding.dayFound ? data.session.dayId : null,
+        adding.dayExercises.map((e) => e.id),
+        name,
+      );
+      setAdding((a) =>
+        a && {
+          ...a,
+          dayExercises: a.dayExercises.some((e) => e.id === ex.id) ? a.dayExercises : [...a.dayExercises, ex],
+          picked: new Set(a.picked).add(ex.id),
+        },
+      );
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
+  async function confirmAdd() {
+    if (!data || !adding) return;
+    const current = data.exercises.map((e) => e.id);
+    const added = adding.dayExercises.filter((e) => adding.picked.has(e.id) && !current.includes(e.id));
+    if (added.length === 0) {
+      setAdding(null);
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      await api(`/api/sessions/${id}`, {
+        method: 'PATCH',
+        body: { exerciseIds: [...current, ...added.map((e) => e.id)] },
+      });
+      // Reload names and best sets for the new exercises; logged rows stay as they are.
+      const d = await api<SessionData>(`/api/sessions/${id}`);
+      setData((prev) => prev && { ...prev, exercises: d.exercises, best: d.best });
+      setAdding(null);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function finish() {
     setBusy(true);
@@ -348,6 +421,31 @@ export default function WorkoutPage() {
             </Card>
           );
         })}
+
+        {!readOnly &&
+          (adding ? (
+            <Card className="space-y-3">
+              <h2 className="text-lg font-medium">Add exercises</h2>
+              <ExercisePicker
+                options={adding.dayExercises.filter((e) => !exercises.some((x) => x.id === e.id))}
+                selected={adding.picked}
+                onToggle={togglePick}
+                onCreate={createForAdd}
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <Button variant="secondary" disabled={busy} onClick={() => setAdding(null)}>
+                  Cancel
+                </Button>
+                <Button disabled={busy || adding.picked.size === 0} onClick={confirmAdd}>
+                  Add to workout
+                </Button>
+              </div>
+            </Card>
+          ) : (
+            <Button variant="secondary" className="w-full" onClick={openAdd}>
+              + Add exercise
+            </Button>
+          ))}
 
         <ErrorText>{error}</ErrorText>
 

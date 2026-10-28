@@ -8,23 +8,26 @@ import { Button, Card, ErrorText, PageHeader } from '@/components/ui';
 
 const UNITS: Unit[] = ['kg', 'lb'];
 
+type Me = { username: string; unit: Unit; showUpNext: boolean };
+
 export default function SettingsPage() {
-  const [me, setMe] = useState<{ username: string; unit: Unit } | null>(null);
+  const [me, setMe] = useState<Me | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    api<{ username: string; unit: Unit }>('/api/me')
+    api<Me>('/api/me')
       .then(setMe)
       .catch((e: Error) => setError(e.message));
   }, []);
 
-  async function changeUnit(unit: Unit) {
-    if (!me || me.unit === unit) return;
+  // Shows the change immediately and reverts it if saving fails.
+  async function change(patch: Partial<Pick<Me, 'unit' | 'showUpNext'>>) {
+    if (!me) return;
     const previous = me;
-    setMe({ ...me, unit });
+    setMe({ ...me, ...patch });
     setError('');
     try {
-      setMe(await api<{ username: string; unit: Unit }>('/api/me', { method: 'PATCH', body: { unit } }));
+      setMe(await api<Me>('/api/me', { method: 'PATCH', body: patch }));
     } catch (e) {
       setMe(previous);
       setError((e as Error).message);
@@ -58,7 +61,7 @@ export default function SettingsPage() {
               {UNITS.map((u) => (
                 <button
                   key={u}
-                  onClick={() => changeUnit(u)}
+                  onClick={() => me.unit !== u && change({ unit: u })}
                   aria-pressed={me.unit === u}
                   className={`min-h-11 rounded-xl font-medium ${
                     me.unit === u ? 'bg-lime-400 text-zinc-950' : 'bg-zinc-800 text-zinc-100'
@@ -68,6 +71,32 @@ export default function SettingsPage() {
                 </button>
               ))}
             </div>
+          </Card>
+
+          <Card>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={me.showUpNext}
+              onClick={() => change({ showUpNext: !me.showUpNext })}
+              className="w-full min-h-11 flex items-center justify-between gap-3 text-left"
+            >
+              <span>
+                <span className="block">Show Up next</span>
+                <span className="block text-sm text-zinc-400">Suggest the next day in your rotation on Home</span>
+              </span>
+              <span
+                className={`relative shrink-0 w-12 h-7 rounded-full transition-colors ${
+                  me.showUpNext ? 'bg-lime-400' : 'bg-zinc-700'
+                }`}
+              >
+                <span
+                  className={`absolute top-1 size-5 rounded-full bg-zinc-950 transition-all ${
+                    me.showUpNext ? 'left-6' : 'left-1'
+                  }`}
+                />
+              </span>
+            </button>
           </Card>
 
           <Card className="p-0 overflow-hidden">

@@ -5,6 +5,7 @@ const userSchema = new Schema(
     username: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true },
     unit: { type: String, enum: ['kg', 'lb'], default: 'kg' },
+    showUpNext: { type: Boolean, default: true },
   },
   { timestamps: true },
 );

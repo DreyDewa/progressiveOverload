@@ -1,6 +1,6 @@
 'use client';
 
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { Button, Card, ErrorText, Input, PageHeader } from '@/components/ui';
@@ -11,6 +11,8 @@ type Day = { id: string; name: string; order: number; exerciseIds: string[] };
 export default function EditDayPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  // Opened from the start-workout screen: go back there, not to the list of days.
+  const back = useSearchParams().get('from') === 'start' ? `/days/${id}/start` : '/days';
   const [day, setDay] = useState<Day | null>(null);
   const [name, setName] = useState('');
   const [exercises, setExercises] = useState<Exercise[]>([]);
@@ -110,7 +112,7 @@ export default function EditDayPage() {
 
   return (
     <main className="max-w-md mx-auto px-4 pt-4 pb-28">
-      <PageHeader title={day?.name ?? 'Edit day'} back="/days" />
+      <PageHeader title={day?.name ?? 'Edit day'} back={back} />
       <ErrorText>{error}</ErrorText>
       {!loaded && !error && <p className="text-zinc-400">Loading…</p>}
       {loaded && (
