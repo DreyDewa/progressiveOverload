@@ -20,8 +20,8 @@ export default function Home() {
   const [open, setOpen] = useState<Open[]>([]);
   const [week, setWeek] = useState<WeekDay[] | null>(null);
   const [score, setScore] = useState<number | null>(null);
+  const [showUpNext, setShowUpNext] = useState(false);
   const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     api<{ days: Day[]; upNextDayId: string | null }>('/api/days')
@@ -30,6 +30,9 @@ export default function Home() {
         setUpNextId(d.upNextDayId);
       })
       .catch((e: Error) => setError(e.message));
+    api<{ showUpNext: boolean }>('/api/me')
+      .then((d) => setShowUpNext(d.showUpNext))
+      .catch(() => {});
     api<{ sessions: Open[] }>('/api/sessions/active')
       .then((d) => setOpen(d.sessions))
       .catch(() => {});
@@ -42,25 +45,15 @@ export default function Home() {
       .catch(() => setScore(null));
   }, []);
 
-  async function start(day: Day) {
-    if (busy) return;
-    if (day.exerciseIds.length === 0) {
-      router.push(`/days/${day.id}`);
-      return;
-    }
-    setBusy(true);
-    setError('');
-    try {
-      const { id } = await api<{ id: string }>('/api/sessions', { method: 'POST', body: { dayId: day.id } });
-      router.push(`/workout/${id}`);
-    } catch (e) {
-      setError((e as Error).message);
-      setBusy(false);
-    }
+  const openFor = (dayId: string) => open.find((o) => o.dayId === dayId);
+
+  // An open workout for the day resumes; otherwise pick today's exercises first.
+  function start(day: Day) {
+    const o = openFor(day.id);
+    router.push(o ? `/workout/${o.id}` : `/days/${day.id}/start`);
   }
 
-  const upNext = days?.find((d) => d.id === upNextId) ?? null;
-  const openFor = (dayId: string) => open.find((o) => o.dayId === dayId);
+  const upNext = (showUpNext && days?.find((d) => d.id === upNextId)) || null;
 
   return (
     <main className="max-w-md mx-auto px-4 pt-4 pb-28">
@@ -99,7 +92,7 @@ export default function Home() {
               <p className="text-sm text-zinc-400">Up next</p>
               <p className="text-2xl font-semibold">{upNext.name}</p>
               <p className="text-sm text-zinc-400 mb-4">{exLabel(upNext.exerciseIds.length)}</p>
-              <Button className="w-full" disabled={busy} onClick={() => start(upNext)}>
+              <Button className="w-full" onClick={() => start(upNext)}>
                 {openFor(upNext.id) ? 'Resume' : 'Start'}
               </Button>
             </Card>
@@ -140,7 +133,6 @@ export default function Home() {
               {days.map((d) => (
                 <button
                   key={d.id}
-                  disabled={busy}
                   onClick={() => start(d)}
                   className="w-full min-h-11 text-left bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex items-center justify-between gap-3"
                 >
@@ -151,7 +143,7 @@ export default function Home() {
                   {openFor(d.id) ? (
                     <span className="text-xs rounded-full bg-lime-400/15 text-lime-400 px-2 py-1">In progress</span>
                   ) : (
-                    d.id === upNextId && (
+                    d.id === upNext?.id && (
                       <span className="text-xs rounded-full bg-lime-400/15 text-lime-400 px-2 py-1">Up next</span>
                     )
                   )}

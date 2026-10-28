@@ -31,6 +31,7 @@ This is the complete spec for v1. It is written to be executed **one task at a t
 - [x] Task 14 — PWA (manifest, icons, metadata)
 - [x] Task 15 — README, deploy button, final QA
 - [x] Task 16 — Best set, last 7 days, several open workouts (requested after v1)
+- [x] Task 17 — Pick exercises per workout, add exercises mid-workout, Up next setting (requested after v1)
 
 ---
 
@@ -46,7 +47,7 @@ The user has a split of N workout days (e.g. "Chest + Back", "Legs", …). At th
 |---|---|
 | Accounts | Username + password only. No email, no password reset, no OAuth. |
 | Number of days | User-defined. **New users start with 4 days** named "Day 1" … "Day 4", all empty. Users can add (max 14), rename, reorder and delete days (min 1). |
-| Day order | Days are a **rotation**, not tied to weekdays. "Up next" = the day after the day of the most recently started workout that has logged sets, finished or still open (wrapping around; changed in Task 16). |
+| Day order | Days are a **rotation**, not tied to weekdays. "Up next" = the day after the day of the most recently started workout that has logged sets, finished or still open (wrapping around; changed in Task 16). Users can hide Up next in Settings (Task 17). |
 | Exercise library | **There is no seeded/global library. Zero exercises exist by default.** Each user creates their own exercises (by typing a name). Users never see other users' exercises. |
 | Recommendations | **The app never recommends weights, reps or targets.** It only shows the user's best session for each exercise (Task 16) and a small ▲ / ▼ / = comparison per set. No rep ranges, no "increase weight" prompts. |
 | Logging | Live, at the gym, set by set. Every change auto-saves to the server. |
@@ -92,6 +93,7 @@ All documents belong to a user via `userId`. **Every query in every API route mu
 | `username` | string, required, unique | Stored lowercase, trimmed. 3–24 chars, `^[a-z0-9_]+$` |
 | `passwordHash` | string, required | bcrypt hash |
 | `unit` | `'kg' \| 'lb'`, default `'kg'` | |
+| `showUpNext` | boolean, default `true` | Added in Task 17 |
 | `createdAt` | Date | via `timestamps: true` |
 
 ### Exercise
@@ -150,8 +152,8 @@ await dbConnect();
 | POST | `/api/auth/register` | `{ username, password }` | 201 `{ ok: true }` + cookie |
 | POST | `/api/auth/login` | `{ username, password }` | `{ ok: true }` + cookie |
 | POST | `/api/auth/logout` | — | `{ ok: true }`, cookie cleared |
-| GET | `/api/me` | — | `{ username, unit }` |
-| PATCH | `/api/me` | `{ unit }` | `{ username, unit }` |
+| GET | `/api/me` | — | `{ username, unit, showUpNext }` |
+| PATCH | `/api/me` | `{ unit?, showUpNext? }` | `{ username, unit, showUpNext }` |
 | GET | `/api/exercises` | — | `{ exercises: Exercise[] }` |
 | POST | `/api/exercises` | `{ name }` | 201 `{ exercise }` (or 200 if existing returned) |
 | PATCH | `/api/exercises/[id]` | `{ name }` | `{ exercise }` |
@@ -162,10 +164,11 @@ await dbConnect();
 | GET | `/api/days/[id]` | — | `{ day, exercises: Exercise[] }` |
 | PATCH | `/api/days/[id]` | `{ name?, exerciseIds? }` | `{ day }` |
 | DELETE | `/api/days/[id]` | — | `{ ok: true }` |
-| POST | `/api/sessions` | `{ dayId }` | `{ id }` (201 if newly created) |
+| POST | `/api/sessions` | `{ dayId, exerciseIds? }` | `{ id }` (201 if newly created) |
 | GET | `/api/sessions/active` | — | `{ session: { id, dayId, dayName, startedAt } \| null }` |
 | GET | `/api/sessions/[id]` | — | see Task 8 |
 | PUT | `/api/sessions/[id]` | `{ entries }` | `{ ok: true }` |
+| PATCH | `/api/sessions/[id]` | `{ exerciseIds }` | `{ ok: true }` |
 | POST | `/api/sessions/[id]/finish` | — | `{ ok: true, deleted: boolean }` |
 | DELETE | `/api/sessions/[id]` | — | `{ ok: true }` |
 | GET | `/api/stats` | — | see Task 11 |
@@ -918,6 +921,17 @@ Requested by the user after v1 shipped. This task overrides the parts of Tasks 8
 4. **Last 7 days.** `GET /api/sessions/week?since=ISO` returns `{ items: { sessionId, dayName, exercise, at }[] }`, one item per set logged since `since`. Home shows a "Last 7 days" card: one row per calendar day (oldest first, local time), each listing the workouts trained that day and their exercises, or "Rest". A workout resumed on a later day shows on both days. Pure helpers: `windowStart` and `groupWeek` in `src/lib/week.ts`.
 
 **Verify:** `npm test` (tests for `pickBest`, `stampSets`, `groupWeek`), lint and build pass.
+
+## Task 17: Pick exercises per workout, add exercises mid-workout, Up next setting
+
+Requested by the user after v1 shipped. This task overrides the parts of Tasks 3, 8, 9, 10 and 13 it mentions.
+
+1. **Up next setting.** `User` gains `showUpNext: boolean` (default `true`). `GET /api/me` returns it; `PATCH /api/me` accepts `{ unit?, showUpNext? }` (at least one). Settings has a "Show Up next" switch. When it is off, Home hides the Up next card and the "Up next" tag.
+2. **Pick exercises before starting.** `Session` gains `exerciseIds: ObjectId[]`, the exercises picked for that workout in display order. Tapping a day on Home (or Start on Up next) opens `/days/[id]/start` ("Which exercises are you doing today?"): a tick-list of the day's exercises, a field to add a new exercise (created with `POST /api/exercises` and appended to the day), a **Start · N exercises** button (disabled until one is picked) and an **Edit day** button → `/days/[id]?from=start` (its Back link returns to the start screen). If the day already has an open workout, Home resumes it instead. `POST /api/sessions { dayId, exerciseIds? }` validates the ids (the user's, not archived, at least one) and stores them; when it returns an open workout that has picked exercises, the new ids are added to it.
+3. **Workout shows only the picked exercises.** `GET /api/sessions/[id]` uses `session.exerciseIds` in place of the day's exercises (still followed by any exercise with logged sets). Workouts with no `exerciseIds` (started before this task) still show the day's exercises.
+4. **Add exercise during a workout.** Below the exercise cards, a **+ Add exercise** button opens the same tick-list with the day's exercises not yet in the workout, plus the new-exercise field. **Add to workout** sends `PATCH /api/sessions/[id] { exerciseIds }` (the full list, only while the workout is open) and the new cards appear without losing typed sets.
+
+**Verify:** lint, build and `npm test` pass. Pick 2 of 4 exercises → the workout shows those 2; add a third mid-workout; a new exercise typed on either screen is also added to the day; turning Up next off hides it on Home.
 
 ---
 

@@ -4,6 +4,7 @@ import { dbConnect } from '@/lib/db';
 import { json, jsonError, readJson } from '@/lib/http';
 import { stampSets } from '@/lib/sets';
 import { pickBest } from '@/lib/stats';
+import { idList } from '@/lib/validate';
 import { Exercise } from '@/models/Exercise';
 import { Session } from '@/models/Session';
 import { User } from '@/models/User';
@@ -29,13 +30,14 @@ export async function GET(_req: Request, { params }: Ctx) {
     sets: e.sets.map((s) => ({ weight: s.weight, reps: s.reps })),
   }));
 
-  const dayIds = (day?.exerciseIds ?? []).map(String);
+  // The exercises picked for this workout; workouts from before picking existed fall back to the day's.
+  const planIds = (session.exerciseIds?.length ? session.exerciseIds : (day?.exerciseIds ?? [])).map(String);
   const entryIds = entries.map((e) => e.exerciseId);
-  const allIds = [...new Set([...dayIds, ...entryIds])];
+  const allIds = [...new Set([...planIds, ...entryIds])];
   const docs = await Exercise.find({ userId, _id: { $in: allIds } }).lean();
   const byId = new Map(docs.map((e) => [e._id.toString(), e]));
   const ordered: string[] = [];
-  for (const eid of dayIds) {
+  for (const eid of planIds) {
     const e = byId.get(eid);
     if (e && !e.archived && !ordered.includes(eid)) ordered.push(eid);
   }
@@ -123,6 +125,27 @@ export async function PUT(req: Request, { params }: Ctx) {
     return { exerciseId: e.exerciseId, sets: stampSets(old?.sets ?? [], e.sets, now, session.startedAt) };
   });
   session.set('entries', stamped);
+  await session.save();
+  return json({ ok: true });
+}
+
+// Sets the exercises picked for this workout (used by "Add exercise" during a workout).
+export async function PATCH(req: Request, { params }: Ctx) {
+  const userId = await getUserId();
+  if (!userId) return jsonError('Unauthorized', 401);
+  await dbConnect();
+  const { id } = await params;
+  if (!mongoose.isValidObjectId(id)) return jsonError('Not found', 404);
+  const session = await Session.findOne({ _id: id, userId });
+  if (!session) return jsonError('Not found', 404);
+  if (session.finishedAt) return jsonError('This workout is already finished', 400);
+
+  const body = await readJson(req);
+  const ids = idList(body?.exerciseIds);
+  if (!ids || ids.length === 0) return jsonError('Invalid exerciseIds', 400);
+  const count = await Exercise.countDocuments({ userId, _id: { $in: ids } });
+  if (count !== ids.length) return jsonError('Invalid exerciseIds', 400);
+  session.set('exerciseIds', ids);
   await session.save();
   return json({ ok: true });
 }

@@ -3,7 +3,7 @@ import { getUserId } from '@/lib/auth';
 import { dbConnect } from '@/lib/db';
 import { toDay } from '@/lib/days';
 import { json, jsonError, readJson } from '@/lib/http';
-import { cleanName } from '@/lib/validate';
+import { cleanName, idList } from '@/lib/validate';
 import { Exercise } from '@/models/Exercise';
 import { WorkoutDay } from '@/models/WorkoutDay';
 
@@ -43,15 +43,8 @@ export async function PATCH(req: Request, { params }: Ctx) {
     day.name = name;
   }
   if ('exerciseIds' in body) {
-    const ids = body.exerciseIds;
-    if (
-      !Array.isArray(ids) ||
-      ids.length > 30 ||
-      !ids.every((i) => typeof i === 'string' && mongoose.isValidObjectId(i)) ||
-      new Set(ids).size !== ids.length
-    ) {
-      return jsonError('Invalid exerciseIds', 400);
-    }
+    const ids = idList(body.exerciseIds);
+    if (!ids) return jsonError('Invalid exerciseIds', 400);
     const count = await Exercise.countDocuments({ userId, archived: false, _id: { $in: ids } });
     if (count !== ids.length) return jsonError('Invalid exerciseIds', 400);
     day.set('exerciseIds', ids);
