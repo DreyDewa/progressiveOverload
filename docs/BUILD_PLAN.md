@@ -32,6 +32,7 @@ This is the complete spec for v1. It is written to be executed **one task at a t
 - [x] Task 15 — README, deploy button, final QA
 - [x] Task 16 — Best set, last 7 days, several open workouts (requested after v1)
 - [x] Task 17 — Pick exercises per workout, add exercises mid-workout, Up next setting (requested after v1)
+- [x] Task 18 — Read-only gym days feed for automations (requested after v1)
 
 ---
 
@@ -78,6 +79,9 @@ The user has a split of N workout days (e.g. "Chest + Back", "Legs", …). At th
 | `MONGODB_URI` | yes | Atlas connection string |
 | `AUTH_SECRET` | yes | Random string ≥ 32 chars, used to sign session JWTs |
 | `MONGODB_DB` | no | Database name. Defaults to `progressive-overload` |
+| `GYM_FEED_KEY` | no | Secret key for the read-only gym days feed (Task 18). The feed is off unless this and `GYM_FEED_USERNAME` are set |
+| `GYM_FEED_USERNAME` | no | Whose gym days the feed returns (Task 18) |
+| `GYM_FEED_TIMEZONE` | no | Time zone the feed uses for dates. Defaults to `Europe/London` |
 
 Local development uses `.env.local` (git-ignored). A committed `.env.example` documents them.
 
@@ -932,6 +936,17 @@ Requested by the user after v1 shipped. This task overrides the parts of Tasks 3
 4. **Add exercise during a workout.** Below the exercise cards, a **+ Add exercise** button opens the same tick-list with the day's exercises not yet in the workout, plus the new-exercise field. **Add to workout** sends `PATCH /api/sessions/[id] { exerciseIds }` (the full list, only while the workout is open) and the new cards appear without losing typed sets.
 
 **Verify:** lint, build and `npm test` pass. Pick 2 of 4 exercises → the workout shows those 2; add a third mid-workout; a new exercise typed on either screen is also added to the day; turning Up next off hides it on Home.
+
+---
+
+## Task 18: Read-only gym days feed for automations
+
+Requested by the user after v1 shipped, so a scheduled automation can count which days they went to the gym. No new dependencies, no UI.
+
+1. `src/lib/trainingDays.ts` (pure, tested in `trainingDays.test.ts`): `trainingDays(setTimes, timeZone)` returns one `{ date: 'YYYY-MM-DD', sets }` per local day with at least one logged set, oldest first.
+2. `GET /api/gym-days?key=SECRET[&days=14]` (the key can also be sent as `Authorization: Bearer SECRET`). Off (404) unless `GYM_FEED_KEY` and `GYM_FEED_USERNAME` are set. A wrong key → 401 (compared in constant time). `days` is clamped to 1–60. Returns `{ timeZone, since, days: [{ date, sets }] }` for that one user only, using each set's `at` (falling back to the session's `startedAt`), with `Cache-Control: no-store`. It never returns exercises, weights, reps or ids, and never writes anything.
+
+**Verify:** lint, build and `npm test` pass. With the env vars unset the route returns 404; with a wrong key, 401; with the right key, the dates you logged sets on.
 
 ---
 
